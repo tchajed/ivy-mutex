@@ -229,6 +229,16 @@ isolate mutex_protocol = {
             invariant l2s_saved -> (($l2s_s T. pc_atomic_store(T))(T) -> ($l2s_s. locked))
             invariant l2s_saved -> (($l2s_s. locked) -> exists T. ($l2s_s T. pc_atomic_store(T))(T))
 
+
+            # basic temporal information from temporal property
+            invariant globally eventually scheduled(T)
+            invariant globally (~pc_finished(t0))
+            invariant ~pc_finished(t0)
+
+            # ignore dynamic abstraction business
+            invariant forall T:thread. l2s_d(T)
+            invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_a(T)
+
     }
 	# proof {
     #         tactic l2s with
