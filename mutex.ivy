@@ -47,12 +47,12 @@ isolate mutex_protocol = {
 
     type thread
 
-    action pc_atomic_cas(t:thread)
-    action pc_futex_wait(t:thread)
-    action pc_kernel_wait(t:thread)
-    action pc_atomic_store(t:thread)
-    action pc_futex_wake(t:thread)
-    action pc_finished(t:thread)
+    action step_atomic_cas(t:thread)
+    action step_futex_wait(t:thread)
+    action step_kernel_wait(t:thread)
+    action step_atomic_store(t:thread)
+    action step_futex_wake(t:thread)
+    action step_finished(t:thread)
 
     specification {
 
@@ -61,21 +61,23 @@ isolate mutex_protocol = {
     relation queue(T:thread)
 
     # local state (program counters)
-    relation step_atomic_cas(T:thread)
-    relation step_futex_wait(T:thread)
-    relation step_kernel_wait(T:thread)
-    relation step_atomic_store(T:thread)
-    relation step_futex_wake(T:thread)
-    relation step_finished(T:thread)
+    relation pc_atomic_cas(T:thread)
+    relation pc_futex_wait(T:thread)
+    relation pc_kernel_wait(T:thread)
+    relation pc_atomic_store(T:thread)
+    relation pc_futex_wake(T:thread)
+    relation pc_finished(T:thread)
 
     # for tracking fairness assumptions
 	relation scheduled(T:thread)
 
 	after init {
             pc_atomic_cas(T) := true;
-            # TODO: other pcs are false
-            pc2(T) := false;
-            pc3(T) := false;
+            pc_futex_wait(T) := false;
+            pc_kernel_wait(T) := false;
+            pc_atomic_store(T) := false;
+            pc_futex_wake(T) := false;
+            pc_finished(T) := false;
             locked := false;
             queue(T) := false;
             scheduled(T) := false;
@@ -100,10 +102,10 @@ isolate mutex_protocol = {
         pc_futex_wait(t) := false;
         if locked {
             # start waiting in kernel
-            pc_kernel_wait := true;
+            pc_kernel_wait(t) := true;
             queue(t) := true;
         } else {
-            pc_atomic_store(t) := true;
+            pc_atomic_cas(t) := true;
         }
         scheduled(T) := T = t;
         scheduled(T) := false;
@@ -122,7 +124,7 @@ isolate mutex_protocol = {
     before step_atomic_store {
         require pc_atomic_store(t);
         pc_atomic_store(t) := false;
-        pc_futex_wake(t) := false;
+        pc_futex_wake(t) := true;
         locked := false;
         scheduled(T) := T = t;
         scheduled(T) := false;
@@ -131,9 +133,10 @@ isolate mutex_protocol = {
     before step_futex_wake {
         require pc_futex_wake(t);
         pc_futex_wake(t) := false;
-        # TODO: need to find a t0 such that queue(t0) (if one exists)
-        queue(t0) := false;
-        pc_finished(t) := false;
+        if some t0:thread. queue(t0) {
+            queue(t0) := false;
+        } # otherwise no signalling is needed
+        pc_finished(t) := true;
         scheduled(T) := T = t;
         scheduled(T) := false;
     }
@@ -145,11 +148,23 @@ isolate mutex_protocol = {
 	################################################################################
 
 	# basic
-	invariant pc1(T) | pc2(T) | pc3(T)
-	invariant ~pc1(T) | ~pc2(T)
-	invariant ~pc1(T) | ~pc3(T)
-	invariant ~pc2(T) | ~pc3(T)
-	invariant m(T,K1) & m(T,K2) -> K1 = K2
+
+    invariant pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T) | pc_atomic_store(T) | pc_futex_wake(T) | pc_finished(T)
+    invariant ~pc_atomic_cas(T) | ~pc_futex_wait(T)
+    invariant ~pc_atomic_cas(T) | ~pc_kernel_wait(T)
+    invariant ~pc_atomic_cas(T) | ~pc_atomic_store(T)
+    invariant ~pc_atomic_cas(T) | ~pc_futex_wake(T)
+    invariant ~pc_atomic_cas(T) | ~pc_finished(T)
+    invariant ~pc_futex_wait(T) | ~pc_kernel_wait(T)
+    invariant ~pc_futex_wait(T) | ~pc_atomic_store(T)
+    invariant ~pc_futex_wait(T) | ~pc_futex_wake(T)
+    invariant ~pc_futex_wait(T) | ~pc_finished(T)
+    invariant ~pc_kernel_wait(T) | ~pc_atomic_store(T)
+    invariant ~pc_kernel_wait(T) | ~pc_futex_wake(T)
+    invariant ~pc_kernel_wait(T) | ~pc_finished(T)
+    invariant ~pc_atomic_store(T) | ~pc_futex_wake(T)
+    invariant ~pc_atomic_store(T) | ~pc_finished(T)
+    invariant ~pc_futex_wake(T) | ~pc_finished(T)
 
 	# safety property
 	invariant pc_atomic_store(T1) & pc_atomic_store(T2) -> T1 = T2
@@ -166,92 +181,94 @@ isolate mutex_protocol = {
 
 
 
-        individual t0:thread  # witness for the formula (exists T0. (globally ~(pc_finished(T0))))
+    #    individual t0:thread  # witness for the formula (exists T0. (globally ~(pc_finished(T0))))
 
-	temporal property [nonstarvation] (
-            # temporal witnesses
-            ((exists T0. (globally ~pc_finished(T0))) -> (globally ~(pc_finished(t0)))
-        ) -> (
-            # temporal property
-            (forall T. globally (eventually scheduled(T))) -> (forall T. eventually (pc_finished(T)))
-        )
-	proof {
-            tactic l2s with
+	# temporal property [nonstarvation] (
+    #         # temporal witnesses
+    #         ((exists T0. (globally ~pc_finished(T0))) -> (globally ~(pc_finished(t0)))
+    #     ) -> (
+    #         # temporal property
+    #         (forall T. globally (eventually scheduled(T))) -> (forall T. eventually (pc_finished(T)))
+    #     )
+	# proof {
+    #         tactic l2s with
 
-            ################################################################################
-            #
-            # Invariants for proving liveness by l2s
-	    #
-	    ################################################################################
+    #         ################################################################################
+    #         #
+    #         # Invariants for proving liveness by l2s
+	#     #
+	#     ################################################################################
 
-            # basic
-	    invariant ~scheduled(T)  # scheduled is only true transiently inside actions
-            invariant globally eventually scheduled(T)
-            invariant eventually (pc2(t0) & globally ~pc3(t0))
-            invariant ~($l2s_w. (pc2(t0) & globally ~pc3(t0))) <-> (pc2(t0) & globally ~pc3(t0))
+    #         # basic
+	#     invariant ~scheduled(T)  # scheduled is only true transiently inside actions
+    #         invariant globally eventually scheduled(T)
+    #         invariant eventually (pc2(t0) & globally ~pc3(t0))
+    #         invariant ~($l2s_w. (pc2(t0) & globally ~pc3(t0))) <-> (pc2(t0) & globally ~pc3(t0))
 
-            # basic, should be added automatically
-            invariant l2s_waiting | l2s_frozen | l2s_saved
-            invariant ~l2s_waiting | ~l2s_frozen
-            invariant ~l2s_waiting | ~l2s_saved
-            invariant ~l2s_frozen  | ~l2s_saved
+    #         # basic, should be added automatically
+    #         invariant l2s_waiting | l2s_frozen | l2s_saved
+    #         invariant ~l2s_waiting | ~l2s_frozen
+    #         invariant ~l2s_waiting | ~l2s_saved
+    #         invariant ~l2s_frozen  | ~l2s_saved
 
-	    # still basic
-            invariant l2s_frozen -> (pc2(t0) & globally ~pc3(t0))
-            invariant l2s_saved  -> (pc2(t0) & globally ~pc3(t0))
-            invariant l2s_saved  -> (($l2s_s T,K. m(T,K))(t0,K) <-> m(t0,K))
-            invariant l2s_saved  -> le( ($ l2s_s . service) , service)
-            invariant l2s_saved  -> le( ($ l2s_s . next_ticket) , next_ticket)
+	#     # still basic
+    #         invariant l2s_frozen -> (pc2(t0) & globally ~pc3(t0))
+    #         invariant l2s_saved  -> (pc2(t0) & globally ~pc3(t0))
+    #         invariant l2s_saved  -> (($l2s_s T,K. m(T,K))(t0,K) <-> m(t0,K))
+    #         invariant l2s_saved  -> le( ($ l2s_s . service) , service)
+    #         invariant l2s_saved  -> le( ($ l2s_s . next_ticket) , next_ticket)
 
-	    # more properties of reachable protocol states useful for liveness proof
-            invariant pc1(T) & m(T,M) & M ~= zero -> ~le(service, M)
-            invariant forall K:ticket. ~le(next_ticket, K) & le(service, K) -> exists T:thread. m(T,K) & ~pc1(T)
-            invariant exists M. m(t0, M)
+	#     # more properties of reachable protocol states useful for liveness proof
+    #         invariant pc1(T) & m(T,M) & M ~= zero -> ~le(service, M)
+    #         invariant forall K:ticket. ~le(next_ticket, K) & le(service, K) -> exists T:thread. m(T,K) & ~pc1(T)
+    #         invariant exists M. m(t0, M)
 
-            # invariant that l2s_d is large enough
-            invariant l2s_d(t0)
-            invariant ~pc1(T) -> l2s_d(T)
-            invariant le(K,next_ticket) -> l2s_d(K)
-            # invariant that l2s_a is large enough
-            invariant ~l2s_waiting -> l2s_a(t0)
-            invariant ~l2s_waiting & m(T,K) & m(t0,K0) & ~le(K0,K) & ~pc1(T) -> l2s_a(T)
-            invariant ~l2s_waiting & m(t0,K0) & le(K,K0) -> l2s_a(K)
+    #         # invariant that l2s_d is large enough
+    #         invariant l2s_d(t0)
+    #         invariant ~pc1(T) -> l2s_d(T)
+    #         invariant le(K,next_ticket) -> l2s_d(K)
+    #         # invariant that l2s_a is large enough
+    #         invariant ~l2s_waiting -> l2s_a(t0)
+    #         invariant ~l2s_waiting & m(T,K) & m(t0,K0) & ~le(K0,K) & ~pc1(T) -> l2s_a(T)
+    #         invariant ~l2s_waiting & m(t0,K0) & le(K,K0) -> l2s_a(K)
 
-            # thread that have not been scheduled have not changed
-            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc1(T))(T) <-> pc1(T))
-            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc2(T))(T) <-> pc2(T))
-            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc3(T))(T) <-> pc3(T))
-            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T,K. m(T,K))(T,K) <-> m(T,K))
+    #         # thread that have not been scheduled have not changed
+    #         invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc1(T))(T) <-> pc1(T))
+    #         invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc2(T))(T) <-> pc2(T))
+    #         invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc3(T))(T) <-> pc3(T))
+    #         invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T,K. m(T,K))(T,K) <-> m(T,K))
 
-            # the thread that must advance - the thread that had the service as its local ticket at the save point
-            invariant (
-                l2s_saved &
-                ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
-                ~($l2s_w X. scheduled(X))(T) &
-                ($l2s_s T. pc2(T))(T) &
-                m(T,K) &
-                m(t0,K0)
-            ) -> (
-                (pc1(T) & K = ($l2s_s. service)) |
-                (pc2(T) & ~le(K,K0)) |
-                (pc3(T) & K = ($l2s_s. service))
-            )
-            invariant (
-                l2s_saved &
-                ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
-                ~($l2s_w T. scheduled(T))(T) &
-                ($l2s_s T. pc3(T))(T) &
-                m(T,K) &
-                m(t0,K0)
-            ) -> (
-                (pc1(T) & K = ($l2s_s. service) & ~le(service, ($l2s_s. service))) |
-                (pc2(T) & ~le(K,K0))
-            )
-	}
-    }
+    #         # the thread that must advance - the thread that had the service as its local ticket at the save point
+    #         invariant (
+    #             l2s_saved &
+    #             ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
+    #             ~($l2s_w X. scheduled(X))(T) &
+    #             ($l2s_s T. pc2(T))(T) &
+    #             m(T,K) &
+    #             m(t0,K0)
+    #         ) -> (
+    #             (pc1(T) & K = ($l2s_s. service)) |
+    #             (pc2(T) & ~le(K,K0)) |
+    #             (pc3(T) & K = ($l2s_s. service))
+    #         )
+    #         invariant (
+    #             l2s_saved &
+    #             ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
+    #             ~($l2s_w T. scheduled(T))(T) &
+    #             ($l2s_s T. pc3(T))(T) &
+    #             m(T,K) &
+    #             m(t0,K0)
+    #         ) -> (
+    #             (pc1(T) & K = ($l2s_s. service) & ~le(service, ($l2s_s. service))) |
+    #             (pc2(T) & ~le(K,K0))
+    #         )
+	# }
+}
 }
 
-export ticket_protocol.step12
-export ticket_protocol.step22
-export ticket_protocol.step23
-export ticket_protocol.step31
+export mutex_protocol.step_atomic_cas
+export mutex_protocol.step_futex_wait
+export mutex_protocol.step_kernel_wait
+export mutex_protocol.step_atomic_store
+export mutex_protocol.step_futex_wake
+export mutex_protocol.step_finished
