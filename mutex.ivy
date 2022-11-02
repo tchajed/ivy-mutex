@@ -47,12 +47,12 @@ isolate mutex_protocol = {
 
     type thread
 
-    action pc_atomic_cas(T:thread)
-    action pc_futex_wait(T:thread)
-    action pc_kernel_wait(T:thread)
-    action pc_atomic_store(T:thread)
-    action pc_futex_wake(T:thread)
-    action pc_finished(T:thread)
+    action pc_atomic_cas(t:thread)
+    action pc_futex_wait(t:thread)
+    action pc_kernel_wait(t:thread)
+    action pc_atomic_store(t:thread)
+    action pc_futex_wake(t:thread)
+    action pc_finished(t:thread)
 
     specification {
 
@@ -111,7 +111,7 @@ isolate mutex_protocol = {
 
     before step_kernel_wait {
         require pc_kernel_wait(t);
-        if !queue(t) {
+        if ~queue(t) {
             pc_kernel_wait(t) := false;
             pc_atomic_cas(t) := true;
         }
