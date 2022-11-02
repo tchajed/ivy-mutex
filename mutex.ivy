@@ -141,6 +141,12 @@ isolate mutex_protocol = {
         scheduled(T) := false;
     }
 
+    before step_finished {
+        require pc_finished(t);
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
 	################################################################################
 	#
 	# Invariants for proving safety (also help for liveness)
@@ -238,6 +244,33 @@ isolate mutex_protocol = {
             # ignore dynamic abstraction business
             invariant forall T:thread. l2s_d(T)
             invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_a(T)
+
+            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_atomic_cas(T))(T) <-> pc_atomic_cas(T))
+            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_futex_wait(T))(T) <-> pc_futex_wait(T))
+            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_kernel_wait(T))(T) <-> pc_kernel_wait(T))
+            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_atomic_store(T))(T) <-> pc_atomic_store(T))
+            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_futex_wake(T))(T) <-> pc_futex_wake(T))
+            invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_finished(T))(T) <-> pc_finished(T))
+
+            invariant queue(T) -> pc_kernel_wait(T)
+            invariant l2s_saved -> (($l2s_s T. queue(T))(T) -> ($l2s_s T. pc_kernel_wait(T))(T))
+
+            invariant l2s_saved -> (
+              ($l2s_s T. pc_atomic_store(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
+              (pc_futex_wake(T) | pc_finished(T))
+            )
+            invariant l2s_saved -> (
+              ($l2s_s T. pc_futex_wake(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
+              pc_finished(T)
+            )
+            invariant forall T1. pc_kernel_wait(T1) -> (
+                exists T2. pc_futex_wake(T2) | pc_atomic_store(T2) | pc_atomic_cas(T2) |
+                (pc_kernel_wait(T2) & ~queue(T2))
+            )
+            invariant l2s_saved -> forall T1. ($l2s_s T. pc_kernel_wait(T))(T1) -> (
+                exists T2. ($l2s_s T. pc_futex_wake(T))(T2) | ($l2s_s T. pc_atomic_store(T))(T2) | ($l2s_s T. pc_atomic_cas(T))(T2) |
+                (($l2s_s T. pc_kernel_wait(T))(T2) & ~($l2s_s T. queue(T))(T2))
+            )
 
     }
 	# proof {
