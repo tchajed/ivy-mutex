@@ -255,6 +255,7 @@ isolate mutex_protocol = {
             invariant queue(T) -> pc_kernel_wait(T)
             invariant l2s_saved -> (($l2s_s T. queue(T))(T) -> ($l2s_s T. pc_kernel_wait(T))(T))
 
+            # threads in unlock make monotonic progress
             invariant l2s_saved -> (
               ($l2s_s T. pc_atomic_store(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
               (pc_futex_wake(T) | pc_finished(T))
@@ -263,6 +264,11 @@ isolate mutex_protocol = {
               ($l2s_s T. pc_futex_wake(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
               pc_finished(T)
             )
+            invariant l2s_saved -> (
+              ($l2s_s T. pc_finished(T))(T) ->
+              pc_finished(T)
+            )
+
             invariant forall T1. pc_kernel_wait(T1) -> (
                 exists T2. pc_futex_wake(T2) | pc_atomic_store(T2) | pc_atomic_cas(T2) |
                 (pc_kernel_wait(T2) & ~queue(T2))
@@ -270,6 +276,86 @@ isolate mutex_protocol = {
             invariant l2s_saved -> forall T1. ($l2s_s T. pc_kernel_wait(T))(T1) -> (
                 exists T2. ($l2s_s T. pc_futex_wake(T))(T2) | ($l2s_s T. pc_atomic_store(T))(T2) | ($l2s_s T. pc_atomic_cas(T))(T2) |
                 (($l2s_s T. pc_kernel_wait(T))(T2) & ~($l2s_s T. queue(T))(T2))
+            )
+            #invariant l2s_saved -> forall T1. (
+            #~($l2s_s. locked) & ($l2s_s T. pc_kernel_wait(T))(T1) & ~($l2s_s T. queue(T))(T1) &
+            #~($l2s_w T. scheduled(T))(T1)
+            #) -> (
+            #pc_atomic_cas(T1) |
+            #exists T2. (($l2s_s T. pc_atomic_cas(T))(T2) |
+            #        ($l2s_s T. pc_futex_wait(T))(T2) |
+            #        ($l2s_s T. pc_kernel_wait(T))(T2)) &
+            #        (pc_atomic_store(T2) |
+            #         pc_futex_wake(T2) |
+            #         pc_finished(T2))
+            #)
+
+            # if the lock was free and a thread was in lock and is still in
+            # lock, then the lock is still free
+            invariant l2s_saved -> (
+            (~($l2s_s. locked) &
+            (forall T.
+                (($l2s_s T. pc_atomic_cas(T))(T) |
+                ($l2s_s T. pc_futex_wait(T))(T) |
+                ($l2s_s T. pc_kernel_wait(T))(T)) ->
+            (pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T)))) ->
+            ~locked
+            )
+
+            invariant l2s_saved -> (
+            (~($l2s_s. locked) &
+            (forall T.
+                (($l2s_s T. pc_atomic_cas(T))(T) |
+                ($l2s_s T. pc_futex_wait(T))(T) |
+                ($l2s_s T. pc_kernel_wait(T))(T)) ->
+            (pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T)))) ->
+            (forall T.
+                (($l2s_s T. pc_atomic_cas(T))(T) &
+                 ~($l2s_w T. scheduled(T))(T)) ->
+                false
+            )
+            )
+
+            invariant l2s_saved -> (
+            (~($l2s_s. locked) &
+            (forall T.
+                (($l2s_s T. pc_atomic_cas(T))(T) |
+                ($l2s_s T. pc_futex_wait(T))(T) |
+                ($l2s_s T. pc_kernel_wait(T))(T)) ->
+            (pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T)))) ->
+            (forall T.
+                (($l2s_s T. pc_futex_wait(T))(T) &
+                 ~($l2s_w T. scheduled(T))(T)) ->
+                pc_atomic_cas(T)
+            )
+            )
+
+            invariant l2s_saved -> (
+            (~($l2s_s. locked) &
+            (forall T.
+                (($l2s_s T. pc_atomic_cas(T))(T) |
+                ($l2s_s T. pc_futex_wait(T))(T) |
+                ($l2s_s T. pc_kernel_wait(T))(T)) ->
+            (pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T)))) ->
+            (forall T.
+                (($l2s_s T. pc_kernel_wait(T))(T) &
+                 ~($l2s_s T. queue(T))(T) &
+                 ~($l2s_w T. scheduled(T))(T)) ->
+                pc_atomic_cas(T)
+            )
+            )
+            invariant l2s_saved -> (
+            (~($l2s_s. locked) &
+            (forall T.
+                (($l2s_s T. pc_atomic_cas(T))(T) |
+                ($l2s_s T. pc_futex_wait(T))(T) |
+                ($l2s_s T. pc_kernel_wait(T))(T)) ->
+            (pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T)))) ->
+            (forall T.
+                (($l2s_s T. pc_kernel_wait(T))(T) &
+                 ~($l2s_s T. queue(T))(T)) ->
+                ~queue(T)
+            )
             )
 
     }
