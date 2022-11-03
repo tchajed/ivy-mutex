@@ -1,40 +1,9 @@
 #lang ivy1.7
 
-# This file contains a liveness proof of the ticket protocol, and
-# illustrates Ivy's liveness to safety tactic on an infinite-state
-# system that requires dynamic abstraction. The example is discussed
-# in the following papers:
-#
-# Oded Padon, Jochen Hoenicke, Giuliano Losa, Andreas Podelski, Mooly
-# Sagiv, and Sharon Shoham: Reducing Liveness to Safety in First-Order
-# Logic. POPL 2018: Article 26.
-#
-# Oded Padon, Jochen Hoenicke, Kenneth L. McMillan, Andreas Podelski,
-# Mooly Sagiv, Sharon Shoham: Temporal Prophecy for Proving Temporal
-# Properties of Infinite-State Systems. FMCAD 2018: 1-11
-#
-# To verify this file, run:
-#
-#     $ ivy_check ticket.ivy
-#     ...
-#     OK
-#
-
 ################################################################################
-# A liveness proof of the ticket protocol
+# A liveness proof of a futex-based mutex
 ################################################################################
 
-
-################################################################################
-# Module for axiomatizing a total order
-################################################################################
-
-module total_order(r) = {
-    axiom r(X,X)                        # Reflexivity
-    axiom r(X, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
-    axiom r(X, Y) & r(Y, X) -> X = Y    # Anti-symmetry
-    axiom r(X, Y) | r(Y, X)             # Totality
-}
 
 ################################################################################
 #
@@ -242,7 +211,7 @@ isolate mutex_protocol = {
             invariant ~pc_finished(t0)
 
             # ignore dynamic abstraction business
-            invariant forall T:thread. l2s_d(T)
+            invariant forall T:thread. l2s_d(T) # this invariant won't succeed
             invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_a(T)
 
             invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_atomic_cas(T))(T) <-> pc_atomic_cas(T))
@@ -273,10 +242,10 @@ isolate mutex_protocol = {
                 exists T2. pc_futex_wake(T2) | pc_atomic_store(T2) | pc_atomic_cas(T2) |
                 (pc_kernel_wait(T2) & ~queue(T2))
             )
-            invariant l2s_saved -> forall T1. ($l2s_s T. pc_kernel_wait(T))(T1) -> (
-                exists T2. ($l2s_s T. pc_futex_wake(T))(T2) | ($l2s_s T. pc_atomic_store(T))(T2) | ($l2s_s T. pc_atomic_cas(T))(T2) |
-                (($l2s_s T. pc_kernel_wait(T))(T2) & ~($l2s_s T. queue(T))(T2))
-            )
+            #invariant l2s_saved -> forall T1. ($l2s_s T. pc_kernel_wait(T))(T1) -> (
+            #    exists T2. ($l2s_s T. pc_futex_wake(T))(T2) | ($l2s_s T. pc_atomic_store(T))(T2) | ($l2s_s T. pc_atomic_cas(T))(T2) |
+            #    (($l2s_s T. pc_kernel_wait(T))(T2) & ~($l2s_s T. queue(T))(T2))
+            #)
             #invariant l2s_saved -> forall T1. (
             #~($l2s_s. locked) & ($l2s_s T. pc_kernel_wait(T))(T1) & ~($l2s_s T. queue(T))(T1) &
             #~($l2s_w T. scheduled(T))(T1)
