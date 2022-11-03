@@ -1,0 +1,201 @@
+#lang ivy1.7
+
+################################################################################
+# A liveness proof of a (better) futex-based mutex
+#
+# See https://github.com/tchajed/futex-tutorial/blob/main/mutex_better.c for a C
+# implementation.
+################################################################################
+
+
+################################################################################
+#
+# Types, relations and functions describing the state
+#
+################################################################################
+
+
+isolate better_mutex = {
+
+    type thread
+
+    action step_lock_acq(t:thread)
+    action step_lock_set_wait(t:thread)
+    action step_futex_wait(t:thread)
+    action step_kernel_wait(t:thread)
+    action step_lock_acq2(t:thread)
+    action step_unlock_sub(t:thread)
+    action step_unlock_store(t:thread)
+    action step_futex_wake(t:thread)
+    action step_finished(t:thread)
+
+    specification {
+
+    # global state (lock and futex queue)
+    # lock_free | lock_w0 | lock_ws corresponds to the lock state (UNLOCKED,
+    # LOCK_NO_WAIT, LOCK_WAIT)
+    relation lock_free
+    relation lock_w0
+    relation lock_ws
+    relation queue(T:thread)
+
+    # local state (program counters)
+    relation lock_acq(T:thread)
+    relation lock_set_wait(T:thread)
+    relation futex_wait(T:thread)
+    relation kernel_wait(T:thread)
+    relation lock_acq2(T:thread)
+    relation unlock_sub(T:thread)
+    relation unlock_store(T:thread)
+    relation futex_wake(T:thread)
+    relation finished(T:thread)
+
+    # for tracking fairness assumptions
+	relation scheduled(T:thread)
+
+	after init {
+            lock_acq(T) := true;
+            lock_set_wait(T) := false;
+            futex_wait(T) := false;
+            kernel_wait(T) := false;
+            lock_acq2(T) := false;
+            unlock_sub(T) := false;
+            unlock_store(T) := false;
+            futex_wake(T) := false;
+            finished(T) := false;
+            lock_free := true;
+            lock_w0 := false;
+            lock_ws := false;
+            queue(T) := false;
+            scheduled(T) := false;
+	}
+
+	before step_lock_acq {
+        require lock_acq(t);
+        lock_acq(t) := false;
+        if lock_free {
+            unlock_sub(t) := true;
+            lock_free := false;
+            lock_w0 := true;
+        } else if lock_w0 {
+            lock_set_wait(t) := true;
+        } else if lock_ws {
+            futex_wait(t) := true;
+        }
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+	}
+
+	before step_lock_set_wait {
+        require lock_set_wait(t);
+        lock_set_wait(t) := false;
+        if lock_free {
+            lock_acq2(t) := true;
+        } else if lock_w0 {
+            lock_w0 := false;
+            lock_ws := true;
+            futex_wait(t) := true;
+        } else if lock_ws {
+            futex_wait(t) := true;
+        }
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+	}
+
+    before step_futex_wait {
+        require futex_wait(t);
+        futex_wait(t) := false;
+        if lock_ws {
+            # start waiting in kernel
+            kernel_wait(t) := true;
+            queue(t) := true;
+        } else {
+            lock_acq2(t) := true;
+        }
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
+    before step_kernel_wait {
+        require kernel_wait(t);
+        if ~queue(t) {
+            kernel_wait(t) := false;
+            lock_acq2(t) := true;
+        }
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
+    before step_lock_acq2 {
+        require lock_acq2(t);
+        lock_acq2(t) := false;
+
+        if lock_free {
+            lock_free := false;
+            lock_ws := true;
+            unlock_sub(t) := true;
+        } else if lock_w0 {
+            lock_set_wait(t) := true;
+        } else if lock_ws {
+            futex_wait(t) := true;
+        }
+
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
+    before step_unlock_sub {
+        require unlock_sub(t);
+        unlock_sub(t) := false;
+        if lock_ws {
+            unlock_store(t) := true;
+            lock_ws := false;
+            lock_w0 := true;
+        } else if lock_w0 {
+            finished(t) := true;
+            lock_w0 := false;
+            lock_free := true;
+        }
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
+    before step_unlock_store {
+        require unlock_store(t);
+        unlock_store(t) := false;
+        futex_wake(t) := true;
+        lock_free := true;
+        lock_w0 := false;
+        lock_ws := false;
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
+    before step_futex_wake {
+        require futex_wake(t);
+        futex_wake(t) := false;
+        if some t0:thread. queue(t0) {
+            queue(t0) := false;
+        } # otherwise no signalling is needed
+        finished(t) := true;
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+
+    before step_finished {
+        require finished(t);
+        scheduled(T) := T = t;
+        scheduled(T) := false;
+    }
+  }
+}
+
+export better_mutex.step_lock_acq
+export better_mutex.step_lock_set_wait
+export better_mutex.step_futex_wait
+export better_mutex.step_kernel_wait
+export better_mutex.step_lock_acq2
+export better_mutex.step_unlock_sub
+export better_mutex.step_unlock_store
+export better_mutex.step_futex_wake
+export better_mutex.step_finished
