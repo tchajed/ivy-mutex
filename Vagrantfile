@@ -8,5 +8,5 @@ Vagrant.configure("2") do |config|
     vb.customize ["modifyvm", :id, "--memory", "4096"]
   end
 
-  config.vm.provision "shell", path: "./vagrant-setup.sh"
+  config.vm.provision "shell", path: "./vagrant-setup.sh", privileged: false
 end
