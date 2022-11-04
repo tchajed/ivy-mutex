@@ -376,6 +376,20 @@ isolate better_mutex = {
             ($l2s_s T. finished(T))(T) ->
             finished(T)
         )
+
+        invariant queue(T) -> kernel_wait(T)
+
+        invariant forall T1. kernel_wait(T1) & lock_ws ->
+            exists T2. unlock_sub(T2) | unlock_store(T2) |
+                (kernel_wait(T2) & ~queue(T2))
+        invariant forall T1. kernel_wait(T1) & lock_w0 ->
+            exists T2. unlock_sub(T2) | unlock_store(T2) |
+                (kernel_wait(T2) & ~queue(T2))
+        # not proven yet (or maybe not true?)
+        #invariant forall T1. kernel_wait(T1) & lock_free ->
+        #    exists T2. futex_wake(T2) |
+        #        lock_acq(T2) | lock_acq2(T2) | lock_set_wait(T2) |
+        #        (kernel_wait(T2) & ~queue(T2))
     } # proof
   } # specification
 } # isolate
