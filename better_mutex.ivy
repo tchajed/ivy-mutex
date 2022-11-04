@@ -157,8 +157,7 @@ isolate better_mutex = {
             lock_w0 := false;
             lock_free := true;
         } else {
-            # not possible
-            unlock_sub(t) := true;
+            assert(false);
         }
         scheduled(T) := T = t;
         scheduled(T) := false;
@@ -379,14 +378,12 @@ isolate better_mutex = {
 
         invariant queue(T) -> kernel_wait(T)
 
-        invariant forall T1. kernel_wait(T1) & lock_ws ->
-            exists T2. unlock_sub(T2) | unlock_store(T2) |
-                (kernel_wait(T2) & ~queue(T2))
-        invariant forall T1. kernel_wait(T1) & lock_w0 ->
-            exists T2. unlock_sub(T2) | unlock_store(T2) |
-                (kernel_wait(T2) & ~queue(T2))
+        invariant forall T1. kernel_wait(T1) & queue(T1) & lock_ws ->
+            exists T2. unlock_sub(T2) | unlock_store(T2)
+        invariant forall T1. kernel_wait(T1) & queue(T1) & lock_w0 ->
+            exists T2. unlock_sub(T2) | unlock_store(T2)
         # not proven yet (or maybe not true?)
-        #invariant forall T1. kernel_wait(T1) & lock_free ->
+        #invariant forall T1. kernel_wait(T1) & queue(T1) & lock_free ->
         #    exists T2. futex_wake(T2) |
         #        lock_acq(T2) | lock_acq2(T2) | lock_set_wait(T2) |
         #        (kernel_wait(T2) & ~queue(T2))
