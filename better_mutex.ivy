@@ -404,7 +404,19 @@ isolate better_mutex = {
                 (kernel_wait(T2) & ~queue(T2))
 
         invariant l2s_saved -> (
-        (~(($l2s_s. lock_w0) | ($l2s_s. lock_ws)) &
+        (($l2s_s. lock_free) &
+        (forall T.
+            (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
+            ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
+            ($l2s_s T. lock_acq2(T))(T)
+            ) ->
+        (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
+            kernel_wait(T) | lock_acq2(T)))) ->
+        lock_free
+        )
+
+        invariant l2s_saved -> (
+        (($l2s_s. lock_free) &
         (forall T.
             (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
             ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
@@ -417,6 +429,66 @@ isolate better_mutex = {
                 ~($l2s_w T. scheduled(T))(T)) ->
             false)
         )
+
+        invariant l2s_saved -> (
+        (($l2s_s. lock_free) &
+        (forall T.
+            (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
+            ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
+            ($l2s_s T. lock_acq2(T))(T)
+            ) ->
+        (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
+            kernel_wait(T) | lock_acq2(T)))) ->
+        (forall T.
+            (($l2s_s T. lock_set_wait(T))(T) &
+                ~($l2s_w T. scheduled(T))(T)) ->
+            lock_acq2(T))
+        )
+
+        invariant l2s_saved -> (
+        (($l2s_s. lock_free) &
+        (forall T.
+            (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
+            ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
+            ($l2s_s T. lock_acq2(T))(T)
+            ) ->
+        (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
+            kernel_wait(T) | lock_acq2(T)))) ->
+        (forall T.
+            (($l2s_s T. futex_wait(T))(T) &
+                ~($l2s_w T. scheduled(T))(T)) ->
+            lock_acq2(T))
+        )
+
+        invariant l2s_saved -> (
+        (($l2s_s. lock_free) &
+        (forall T.
+            (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
+            ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
+            ($l2s_s T. lock_acq2(T))(T)
+            ) ->
+        (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
+            kernel_wait(T) | lock_acq2(T)))) ->
+        (forall T.
+            (~($l2s_s T. queue(T))(T)) ->
+            ~queue(T))
+        )
+
+        invariant l2s_saved -> (
+        (($l2s_s. lock_free) &
+        (forall T.
+            (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
+            ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
+            ($l2s_s T. lock_acq2(T))(T)
+            ) ->
+        (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
+            kernel_wait(T) | lock_acq2(T)))) ->
+        (forall T.
+            (($l2s_s T. kernel_wait(T))(T) & ~($l2s_s T. queue(T))(T) &
+                ~($l2s_w T. scheduled(T))(T)) ->
+            lock_acq2(T))
+        )
+
     } # proof
   } # specification
 } # isolate
