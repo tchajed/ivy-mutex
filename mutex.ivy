@@ -141,11 +141,15 @@ isolate mutex_protocol = {
     invariant ~pc_atomic_store(T) | ~pc_finished(T)
     invariant ~pc_futex_wake(T) | ~pc_finished(T)
 
-	# safety property
+    #######################################
+    # Safety invariant (mutual exclusion)
+    #######################################
 	invariant pc_atomic_store(T1) & pc_atomic_store(T2) -> T1 = T2
 
 	# inductive invariant for proving safety
     invariant pc_atomic_store(T) -> locked
+
+    # a sort of converse to safety, useful for the liveness proof
     invariant locked -> exists T. pc_atomic_store(T)
 
         ################################################################################

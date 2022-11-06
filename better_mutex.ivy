@@ -242,9 +242,13 @@ isolate better_mutex = {
     # mutual exclusion (and some inductive properties)
     invariant unlock_sub(T) -> (lock_w0 | lock_ws)
     invariant unlock_store(T) -> (lock_w0 | lock_ws)
-    # this is really the mutual exclusion property
+
+    #######################################
+    # Safety invariant (mutual exclusion)
+    #######################################
     invariant unlock_sub(T1) & unlock_sub(T2) -> T1 = T2
-    # ...but unlock_sub | unlock_store is a valid mutual exclusion state
+
+    # in addition, unlock_sub | unlock_store is a valid mutual exclusion state
     invariant unlock_store(T1) & unlock_store(T2) -> T1 = T2
     invariant unlock_sub(T1) & unlock_store(T2) -> false
     # putting the above together
