@@ -394,7 +394,7 @@ isolate better_mutex = {
             exists T2. unlock_store(T2) | (kernel_wait(T2) & ~queue(T2)) |
                        lock_acq2(T2) | futex_wake(T2) | lock_set_wait(T2)
         invariant forall T1. kernel_wait(T1) & queue(T1) & lock_free ->
-            exists T2. unlock_store(T2) | futex_wake(T2) |
+            exists T2. futex_wake(T2) |
                 lock_acq2(T2) | lock_set_wait(T2) |
                 (kernel_wait(T2) & ~queue(T2))
         # combine the above invariants
