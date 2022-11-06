@@ -375,6 +375,12 @@ isolate better_mutex = {
             ($l2s_s T. finished(T))(T) ->
             finished(T)
         )
+        # a thread in lock_acq will make progress to some other state (but it
+        # could be anything)
+        invariant l2s_saved -> (
+            ($l2s_s T. lock_acq(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
+            ~lock_acq(T)
+        )
 
         invariant queue(T) -> kernel_wait(T)
 
@@ -396,6 +402,21 @@ isolate better_mutex = {
                 unlock_store(T2) | futex_wake(T2) |
                 lock_acq2(T2) | lock_set_wait(T2) |
                 (kernel_wait(T2) & ~queue(T2))
+
+        invariant l2s_saved -> (
+        (~(($l2s_s. lock_w0) | ($l2s_s. lock_ws)) &
+        (forall T.
+            (($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_set_wait(T))(T) |
+            ($l2s_s T. futex_wait(T))(T) | ($l2s_s T. kernel_wait(T))(T) |
+            ($l2s_s T. lock_acq2(T))(T)
+            ) ->
+        (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
+            kernel_wait(T) | lock_acq2(T)))) ->
+        (forall T.
+            ((($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_acq2(T))(T)) &
+                ~($l2s_w T. scheduled(T))(T)) ->
+            false)
+        )
     } # proof
   } # specification
 } # isolate
