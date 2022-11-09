@@ -28,6 +28,7 @@ isolate better_mutex = {
     action step_unlock_store(t:thread)
     action step_futex_wake(t:thread)
     action step_finished(t:thread)
+    action add_to_d(t:thread)
 
     specification {
 
@@ -263,11 +264,21 @@ isolate better_mutex = {
 	#
 	################################################################################
 
+    # workaround to take advantage of the fact that the set of threads is finite
+    relation d(T:thread)
+    after init {
+        d(T) := false;
+    }
+    before add_to_d { d(t) := true }
+    # fairness: eventually forall T. d(T)
+
     individual t0:thread  # witness for the formula (exists T0. (globally ~(pc_finished(T0))))
 
     temporal property [nonstarvation] (
             # temporal witnesses
-            (exists T0. (globally ~finished(T0))) -> (globally ~(finished(t0)))
+            (exists T0. (globally ~finished(T0))) -> (globally ~(finished(t0))) &
+            # finitely many threads
+            (eventually forall T. d(T))
         ) -> (
             # temporal property
             (forall T. globally (eventually scheduled(T))) -> (forall T. eventually (finished(T)))
@@ -288,8 +299,11 @@ isolate better_mutex = {
         invariant globally (~finished(t0))
         invariant ~finished(t0)
 
-        # ignore dynamic abstraction business
-        invariant forall T:thread. l2s_d(T) # this invariant won't succeed
+        # threads finite workaround
+        invariant eventually forall T. d(T)
+        invariant ($l2s_w. forall T. d(T)) | forall T. d(T)
+        invariant d(T) -> l2s_d(T)
+        invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_d(T)
         invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_a(T)
 
         # copy all safety invariants

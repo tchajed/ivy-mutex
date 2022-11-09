@@ -223,7 +223,7 @@ isolate mutex_protocol = {
             invariant globally (~pc_finished(t0))
             invariant ~pc_finished(t0)
 
-            # nodes finite workaround
+            # threads finite workaround
             invariant eventually forall T. d(T)
             invariant ($l2s_w. forall T. d(T)) | forall T. d(T)
             invariant d(T) -> l2s_d(T)
