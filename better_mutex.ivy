@@ -442,8 +442,7 @@ isolate better_mutex = {
             ) ->
         (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
             kernel_wait(T) | lock_acq2(T)))) ->
-        (forall T.
-            ((($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_acq2(T))(T)) &
+        (((($l2s_s T. lock_acq(T))(T) | ($l2s_s T. lock_acq2(T))(T)) &
                 ~($l2s_w T. scheduled(T))(T)) ->
             false)
         )
@@ -457,9 +456,8 @@ isolate better_mutex = {
             ) ->
         (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
             kernel_wait(T) | lock_acq2(T)))) ->
-        (forall T.
-            (($l2s_s T. lock_set_wait(T))(T) &
-                ~($l2s_w T. scheduled(T))(T)) ->
+        (($l2s_s T. lock_set_wait(T))(T) &
+                ~($l2s_w T. scheduled(T))(T) ->
             lock_acq2(T))
         )
 
@@ -472,9 +470,8 @@ isolate better_mutex = {
             ) ->
         (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
             kernel_wait(T) | lock_acq2(T)))) ->
-        (forall T.
-            (($l2s_s T. futex_wait(T))(T) &
-                ~($l2s_w T. scheduled(T))(T)) ->
+        (($l2s_s T. futex_wait(T))(T) &
+                ~($l2s_w T. scheduled(T))(T) ->
             lock_acq2(T))
         )
 
@@ -487,8 +484,7 @@ isolate better_mutex = {
             ) ->
         (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
             kernel_wait(T) | lock_acq2(T)))) ->
-        (forall T.
-            (~($l2s_s T. queue(T))(T)) ->
+        (~($l2s_s T. queue(T))(T) ->
             ~queue(T))
         )
 
@@ -501,9 +497,8 @@ isolate better_mutex = {
             ) ->
         (lock_acq(T) | lock_set_wait(T) | futex_wait(T) |
             kernel_wait(T) | lock_acq2(T)))) ->
-        (forall T.
-            (($l2s_s T. kernel_wait(T))(T) & ~($l2s_s T. queue(T))(T) &
-                ~($l2s_w T. scheduled(T))(T)) ->
+        (($l2s_s T. kernel_wait(T))(T) & ~($l2s_s T. queue(T))(T) &
+                ~($l2s_w T. scheduled(T))(T) ->
             lock_acq2(T))
         )
 
