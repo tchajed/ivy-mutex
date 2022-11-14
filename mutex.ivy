@@ -254,8 +254,8 @@ isolate mutex_protocol = {
               pc_finished(T)
             )
 
-            invariant forall T1. pc_kernel_wait(T1) -> (
-                exists T2. pc_futex_wake(T2) | pc_atomic_store(T2) | pc_atomic_cas(T2) |
+            invariant forall T1. pc_kernel_wait(T1) & queue(T1) & ~locked -> (
+                exists T2. pc_futex_wake(T2) | pc_atomic_cas(T2) |
                 (pc_kernel_wait(T2) & ~queue(T2))
             )
             #invariant l2s_saved -> forall T1. ($l2s_s T. pc_kernel_wait(T))(T1) -> (
@@ -337,8 +337,7 @@ isolate mutex_protocol = {
                 ($l2s_s T. pc_kernel_wait(T))(T)) ->
             (pc_atomic_cas(T) | pc_futex_wait(T) | pc_kernel_wait(T)))) ->
             (forall T.
-                (($l2s_s T. pc_kernel_wait(T))(T) &
-                 ~($l2s_s T. queue(T))(T)) ->
+                (~($l2s_s T. queue(T))(T)) ->
                 ~queue(T)
             )
             )
