@@ -160,6 +160,10 @@ isolate mutex_protocol = {
 	################################################################################
 
     # workaround to take advantage of the fact that the set of threads is finite
+    #
+    # d will accumulate threads one step at a time, and we'll assume eventually,
+    # forall T. d(T). This makes sense when `thread` is a finite type, which is
+    # a consistent thing to assume.
     relation d(T:thread)
     after init {
         d(T) := false;
@@ -215,7 +219,6 @@ isolate mutex_protocol = {
 
             # inductive invariant for proving safety
             invariant l2s_saved -> (($l2s_s T. pc_atomic_store(T))(T) -> ($l2s_s. locked))
-            invariant l2s_saved -> (($l2s_s. locked) -> exists T. ($l2s_s T. pc_atomic_store(T))(T))
 
 
             # basic temporal information from temporal property
@@ -223,13 +226,17 @@ isolate mutex_protocol = {
             invariant globally (~pc_finished(t0))
             invariant ~pc_finished(t0)
 
-            # threads finite workaround
+            # finite-thread workaround
+            #
+            # l2s_d is the finite abstraction of the system, and because of
+            # finiteness it can contain every thread.
             invariant eventually forall T. d(T)
             invariant ($l2s_w. forall T. d(T)) | forall T. d(T)
             invariant d(T) -> l2s_d(T)
             invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_d(T)
             invariant (l2s_frozen | l2s_saved) -> forall T:thread. l2s_a(T)
 
+            # if a thread is waiting to be scheduled, its PC won't change
             invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_atomic_cas(T))(T) <-> pc_atomic_cas(T))
             invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_futex_wait(T))(T) <-> pc_futex_wait(T))
             invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_kernel_wait(T))(T) <-> pc_kernel_wait(T))
@@ -237,24 +244,34 @@ isolate mutex_protocol = {
             invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_futex_wake(T))(T) <-> pc_futex_wake(T))
             invariant l2s_saved & ($l2s_w T. scheduled(T))(T) -> (($l2s_s T. pc_finished(T))(T) <-> pc_finished(T))
 
+            # a simple invariant from the fact that entering kernel_wait is the
+            # only way to enter the queue
             invariant queue(T) -> pc_kernel_wait(T)
             invariant l2s_saved -> (($l2s_s T. queue(T))(T) -> ($l2s_s T. pc_kernel_wait(T))(T))
 
             # threads in unlock make monotonic progress
-            invariant l2s_saved -> (
+            invariant [atomic_store_progress] l2s_saved -> (
               ($l2s_s T. pc_atomic_store(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
               (pc_futex_wake(T) | pc_finished(T))
             )
-            invariant l2s_saved -> (
+            invariant [futex_wake_progress] l2s_saved -> (
               ($l2s_s T. pc_futex_wake(T))(T) & ~($l2s_w T. scheduled(T))(T) ->
               pc_finished(T)
             )
-            invariant l2s_saved -> (
+            invariant [finished_stable] l2s_saved -> (
               ($l2s_s T. pc_finished(T))(T) ->
               pc_finished(T)
             )
 
-            invariant forall T1. pc_kernel_wait(T1) & queue(T1) & ~locked -> (
+            # if the lock is held, then there's a thread in atomic_store and the
+            # above argument shows that it must make progress when scheduled
+            invariant [locked_thread] l2s_saved -> (($l2s_s. locked) -> exists T. ($l2s_s T. pc_atomic_store(T))(T))
+
+            # a key invariant of the liveness proof: if a thread is in
+            # kernel_wait, in the queue (therefore not enabled), and the lock is
+            # free (thus the above argument doesn't apply), then there exists a
+            # thread in futex_wake or atomic_cas that will make progress
+            invariant [kernel_wait_exist] forall T1. pc_kernel_wait(T1) & queue(T1) & ~locked -> (
                 exists T2. pc_futex_wake(T2) | pc_atomic_cas(T2) |
                 (pc_kernel_wait(T2) & ~queue(T2))
             )
@@ -275,6 +292,15 @@ isolate mutex_protocol = {
             #         pc_finished(T2))
             #)
 
+            ## ------------------
+            ## We'll now have several invariants with the same premise: the lock
+            ## was free in the saved state and every thread in the lock() code
+            ## is still there. If the lock was held, then the above arguments
+            ## show that the thread holding the lock would have changed. If some
+            ## thread in lock ended up not in the lock, then that represents a
+            ## change and thus this isn't a loop.
+            ## ------------------
+
             # if the lock was free and a thread was in lock and is still in
             # lock, then the lock is still free
             invariant l2s_saved -> (
@@ -287,7 +313,10 @@ isolate mutex_protocol = {
             ~locked
             )
 
-            invariant l2s_saved -> (
+            # under these conditions, there can't be a scheduled thread in
+            # atomic_cas in the saved state (since it would have acquired the
+            # lock)
+            invariant [atomic_cas_progress] l2s_saved -> (
             (~($l2s_s. locked) &
             (forall T.
                 (($l2s_s T. pc_atomic_cas(T))(T) |
@@ -301,7 +330,9 @@ isolate mutex_protocol = {
             )
             )
 
-            invariant l2s_saved -> (
+            # a thread in futex_wait would have moved to atomic_cas, which is a
+            # change and thus this isn't a loop
+            invariant [futex_wait_progress] l2s_saved -> (
             (~($l2s_s. locked) &
             (forall T.
                 (($l2s_s T. pc_atomic_cas(T))(T) |
@@ -315,7 +346,10 @@ isolate mutex_protocol = {
             )
             )
 
-            invariant l2s_saved -> (
+            # a thread in kernel_wait but not in the queue is enabled and must
+            # have moved to atomic_cas (because the assumption is that it stayed
+            # in lock()), which is a change
+            invariant [kernel_wait_unqueued] l2s_saved -> (
             (~($l2s_s. locked) &
             (forall T.
                 (($l2s_s T. pc_atomic_cas(T))(T) |
@@ -329,6 +363,14 @@ isolate mutex_protocol = {
                 pc_atomic_cas(T)
             )
             )
+
+            # For the above argument to hold inductively, we need to show that a
+            # thread not in the queue stays out of the queue. This is true
+            # because the futex_wait -> kernel_wait transition that adds to the
+            # queue requires the lock to be held, and it can't do that in these
+            # circumstances.
+            #
+            # NOTE(tej): not sure I can concretely explain why this is useful
             invariant l2s_saved -> (
             (~($l2s_s. locked) &
             (forall T.
@@ -341,6 +383,12 @@ isolate mutex_protocol = {
                 ~queue(T)
             )
             )
+
+            # The final case is that a thread was in kernel_wait and was in the
+            # queue; the invariant `kernel_wait_exist` above shows that then
+            # there's some other thread that will change state if schedule
+            # (either a futex_wake that will transition to finished, or an
+            # atomic_cas that can't stay in lock() as we assumed).
 
     }
 }
