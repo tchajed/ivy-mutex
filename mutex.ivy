@@ -150,9 +150,6 @@ isolate mutex_protocol = {
 	# inductive invariant for proving safety
     invariant pc_atomic_store(T) -> locked
 
-    # a sort of converse to safety, useful for the liveness proof
-    invariant locked -> exists T. pc_atomic_store(T)
-
         ################################################################################
 	#
 	# Temporal property and its proof
@@ -265,12 +262,13 @@ isolate mutex_protocol = {
 
             # if the lock is held, then there's a thread in atomic_store and the
             # above argument shows that it must make progress when scheduled
-            invariant [locked_thread] l2s_saved -> (($l2s_s. locked) -> exists T. ($l2s_s T. pc_atomic_store(T))(T))
+            invariant [locked_thread] locked -> exists T. pc_atomic_store(T)
 
-            # a key invariant of the liveness proof: if a thread is in
+            # A key invariant of the liveness proof: if a thread is in
             # kernel_wait, in the queue (therefore not enabled), and the lock is
             # free (thus the above argument doesn't apply), then there exists a
-            # thread in futex_wake or atomic_cas that will make progress
+            # thread in futex_wake or atomic_cas. This is the thread that will
+            # make progress.
             invariant [kernel_wait_exist] forall T1. pc_kernel_wait(T1) & queue(T1) & ~locked -> (
                 exists T2. pc_futex_wake(T2) | pc_atomic_cas(T2) |
                 (pc_kernel_wait(T2) & ~queue(T2))
@@ -299,6 +297,11 @@ isolate mutex_protocol = {
             ## show that the thread holding the lock would have changed. If some
             ## thread in lock ended up not in the lock, then that represents a
             ## change and thus this isn't a loop.
+            ##
+            ## What we need to show is that it's not possible for a thread in
+            ## the lock() code in the saved state to be in exactly the same
+            ## state now. As long as there's some change, then this execution
+            ## isn't a loop and thus isn't a counter-example to liveness.
             ## ------------------
 
             # if the lock was free and a thread was in lock and is still in
