@@ -9,7 +9,7 @@ more sophisticated and tracks a little extra state.
 The C code corresponding to the simple mutex
 is at
 [mutex.c](https://github.com/tchajed/futex-tutorial/blob/main/mutex.c) while the
-better mutex is at [better_mutex.c](https://github.com/tchajed/futex-tutorial/blob/main/better_mutex.c).
+better mutex is at [mutex_better.c](https://github.com/tchajed/futex-tutorial/blob/main/mutex_better.c).
 
 These proofs use Ivy's liveness-to-safety reduction feature, described in [this
 POPL 2018
