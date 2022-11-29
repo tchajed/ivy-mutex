@@ -178,8 +178,8 @@ isolate better_mutex = {
     before step_futex_wake {
         require futex_wake(t);
         futex_wake(t) := false;
-        if some t0:thread. queue(t0) {
-            queue(t0) := false;
+        if some t_q:thread. queue(t_q) {
+            queue(t_q) := false;
         } # otherwise no signalling is needed
         finished(t) := true;
         scheduled(T) := T = t;
