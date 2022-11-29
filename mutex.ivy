@@ -103,8 +103,8 @@ isolate mutex_protocol = {
     before step_futex_wake {
         require pc_futex_wake(t);
         pc_futex_wake(t) := false;
-        if some t0:thread. queue(t0) {
-            queue(t0) := false;
+        if some t_q:thread. queue(t_q) {
+            queue(t_q) := false;
         } # otherwise no signalling is needed
         pc_finished(t) := true;
         scheduled(T) := T = t;
