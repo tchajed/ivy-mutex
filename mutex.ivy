@@ -403,3 +403,4 @@ export mutex_protocol.step_kernel_wait
 export mutex_protocol.step_atomic_store
 export mutex_protocol.step_futex_wake
 export mutex_protocol.step_finished
+export mutex_protocol.add_to_d
